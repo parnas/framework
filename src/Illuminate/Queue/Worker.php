@@ -553,14 +553,27 @@ class Worker
      */
     protected function calculateBackoff($job, WorkerOptions $options)
     {
-        $backoff = explode(
-            ',',
-            method_exists($job, 'backoff') && ! is_null($job->backoff())
-                        ? $job->backoff()
-                        : $options->backoff
-        );
+        $config = method_exists($job, 'backoff') && ! is_null($job->backoff())
+            ? $job->backoff()
+            : $options->backoff;
 
-        return (int) ($backoff[$job->attempts() - 1] ?? last($backoff));
+        $backoff = (is_array($config)) ? $config : explode(',', $config);
+
+        $nextAttemptIndex = $job->attempts() - 1;
+
+        if(isset($backoff[$nextAttemptIndex])) {
+            return $backoff[$nextAttemptIndex];
+        }
+
+        ksort($backoff);
+
+        foreach(array_reverse($backoff, true) as $attempt => $delay) {
+            if($nextAttemptIndex > $attempt) {
+                return $delay;
+            }
+        }
+
+        return last($backoff);
     }
 
     /**

@@ -279,6 +279,44 @@ class QueueWorkerTest extends TestCase
         $this->assertEquals(10, $job->releaseAfter);
     }
 
+    /**
+     * @dataProvider backoffDataProvider
+     *
+     * @param array|string $backoff
+     * @param array $expected
+     */
+    public function testBackoffDelays($backoff, array $expected)
+    {
+        $i = 0;
+        $workerOptions = $this->workerOptions(['maxTries' => count($expected)+1]);
+        foreach($expected as $expectedValue) {
+
+            $job = new WorkerFakeJob(function ($job) {
+                $job->attempts++;
+                throw new Exception('Something went wrong.');
+            });
+
+            $job->backoff = $backoff;
+            $job->attempts = $i++;
+
+            $worker = $this->getWorker('default', ['queue' => [$job]]);
+            $worker->runNextJob('default', 'queue', $workerOptions);
+
+            $this->assertEquals($expectedValue, $job->releaseAfter);
+        }
+    }
+
+    public function backoffDataProvider()
+    {
+        return [
+          [[2, 3, 5, 7, 9], [2, 3, 5, 7, 9]],
+          ['2, 3, 5, 7, 9', [2, 3, 5, 7, 9]],
+          [[0 => 1, 3 => 3, 5 => 8], [1, 1, 1, 3, 3, 8, 8, 8]],
+          [[5, 5, 10, 3 => 15], [5, 5, 10, 15, 15]]
+        ];
+    }
+
+
     public function testJobRunsIfAppIsNotInMaintenanceMode()
     {
         $firstJob = new WorkerFakeJob(function ($job) {
